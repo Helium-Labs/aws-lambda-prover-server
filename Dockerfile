@@ -1,37 +1,36 @@
-# Build prover-server
-FROM golang:1.18.2-bullseye as base
-
-WORKDIR /build
-
-COPY go.mod ./
-COPY go.sum ./
-RUN go mod download
-
-COPY ./cmd ./cmd
-COPY ./pkg ./pkg
-
-RUN go build -o ./prover ./cmd/prover/prover.go
-RUN go build -tags="rapidsnark_noasm" -o ./prover_noasm ./cmd/prover/prover.go
-
-
 # Main image
-FROM alpine:3.16.0
+FROM public.ecr.aws/lambda/provided:al2023-arm64
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.8.4 /lambda-adapter /opt/extensions/lambda-adapter
+ENV PORT=8080
 
-RUN apk add --no-cache libstdc++ gcompat libgomp
+# Install necessary tools and dependencies for ARM build
+RUN dnf install -y golang gcc gcc-c++ \
+    && go env -w GOARCH=arm64 GOOS=linux \
+    && go env -w GOPROXY=direct
 
-COPY --from=base /build/prover /home/app/prover
-COPY --from=base /build/prover_noasm /home/app/prover_noasm
-COPY --from=base /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=base "/go/pkg/mod/github.com/wasmerio/wasmer-go@v1.0.4/wasmer/packaged/lib/linux-amd64/libwasmer.so" \
-"/go/pkg/mod/github.com/wasmerio/wasmer-go@v1.0.4/wasmer/packaged/lib/linux-amd64/libwasmer.so"
-COPY docker-entrypoint.sh /usr/local/bin/
+# Set up Go paths
+ENV GOPATH=/go
+ENV PATH="$GOPATH/bin:$PATH"
 
-COPY ./configs   /home/app/configs
-COPY ./circuits  /home/app/circuits
-
+# Set working directory
 WORKDIR /home/app
 
-# Command to run
+# Copy source files
+COPY . .
+
+# Prepare Go environment
+RUN go mod tidy
+RUN go mod download
+
+# Build main binaries for ARM architecture
+RUN GOARCH=arm64 GOOS=linux go build -o ./prover ./cmd/prover/prover.go
+RUN GOARCH=arm64 GOOS=linux go build -tags="rapidsnark_noasm" -o ./prover_noasm ./cmd/prover/prover.go
+
+# Copy entrypoint and additional configurations
+COPY docker-entrypoint.sh /usr/local/bin/
+
+# Set the command to run the application
 ENTRYPOINT ["docker-entrypoint.sh"]
 
-EXPOSE 8002
+# Expose application port
+EXPOSE 8080

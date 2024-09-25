@@ -6,3 +6,5 @@ circuits
 #Editors
 .idea
 .vscode
+samconfig.toml
+.aws-sam

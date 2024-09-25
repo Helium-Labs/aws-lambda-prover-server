@@ -2,9 +2,10 @@ package app
 
 import (
 	"fmt"
+	"net/http"
+
 	"github.com/go-chi/chi"
 	"github.com/iden3/prover-server/pkg/log"
-	"net/http"
 )
 
 // Server instance of chi server
